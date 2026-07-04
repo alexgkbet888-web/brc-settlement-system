@@ -492,7 +492,7 @@
         <div class="brand-mark" aria-hidden="true">U</div>
         <div>
           <h1>结算系统</h1>
-          <div class="period" id="periodText">2026年05月结算 · 结算时间 2026年06月04日</div>
+          <div class="period" id="periodText"></div>
         </div>
       </div>
       <div class="toolbar" aria-label="操作">
@@ -514,23 +514,23 @@
         <div class="field">
           <label for="settlementMonth">结算月份</label>
           <div class="input-wrap">
-            <input id="settlementMonth" type="month" value="2026-05" />
+            <input id="settlementMonth" type="month" />
           </div>
         </div>
         <div class="field">
           <label for="settlementDate">结算时间</label>
           <div class="input-wrap">
-            <input id="settlementDate" type="date" value="2026-06-04" />
+            <input id="settlementDate" type="date" />
           </div>
         </div>
         <div class="field">
           <label for="grossAmount">结算总额</label>
           <div class="input-wrap">
             <span class="input-prefix">U</span>
-            <input id="grossAmount" inputmode="decimal" autocomplete="off" value="1,678,298" />
+            <input id="grossAmount" inputmode="decimal" autocomplete="off" />
           </div>
         </div>
-        <button class="primary-button" type="button" id="sampleBtn">恢复样例数据</button>
+        <button class="primary-button" type="button" id="sampleBtn">清空数据</button>
         <div class="rule-list" aria-label="结算比例">
           <div class="rule-row"><span>运营团队</span><span class="rule-value">5%</span></div>
           <div class="rule-row"><span>市场团队</span><span class="rule-value">10%</span></div>
@@ -544,15 +544,15 @@
         <div class="summary-grid">
           <article class="metric month">
             <div class="metric-label">结算月份</div>
-            <div class="metric-value" id="monthValue">2026年05月</div>
+            <div class="metric-value" id="monthValue"></div>
           </article>
           <article class="metric expense">
             <div class="metric-label">合计支出</div>
-            <div class="metric-value" id="expenseValue">251,744 U</div>
+            <div class="metric-value" id="expenseValue"></div>
           </article>
           <article class="metric net">
             <div class="metric-label">净额</div>
-            <div class="metric-value" id="netValue">1,426,554 U</div>
+            <div class="metric-value" id="netValue"></div>
           </article>
         </div>
 
@@ -654,13 +654,18 @@
     }
 
     function parseLocalDate(value) {
-      const fallback = "2026-06-04";
-      const raw = value || fallback;
+      if (!value) {
+        return null;
+      }
+      const raw = value;
       const [year, month, day] = raw.split("-").map(Number);
       return new Date(year, month - 1, day);
     }
 
     function formatDateCN(date) {
+      if (!date) {
+        return "";
+      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
@@ -668,6 +673,9 @@
     }
 
     function getSettlementMonth(date) {
+      if (!date) {
+        return null;
+      }
       return new Date(date.getFullYear(), date.getMonth() - 1, 1);
     }
 
@@ -676,10 +684,13 @@
         const [year, month] = value.split("-").map(Number);
         return new Date(year, month - 1, 1);
       }
-      return getSettlementMonth(fallbackDate);
+      return fallbackDate ? getSettlementMonth(fallbackDate) : null;
     }
 
     function formatMonthCN(date) {
+      if (!date) {
+        return "";
+      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       return `${year}年${month}月`;
@@ -689,6 +700,7 @@
       const gross = parseAmount(els.gross.value);
       const date = parseLocalDate(els.date.value);
       const month = parseMonthInput(els.settlementMonth.value, date);
+      const hasGross = gross > 0;
       const teamTotalRate = CONFIG.teams.reduce((sum, item) => sum + item.rate, 0);
       const totalExpense = CONFIG.rounding(gross * teamTotalRate);
       const net = CONFIG.rounding(gross - totalExpense);
@@ -703,6 +715,7 @@
 
       return {
         gross,
+        hasGross,
         date,
         month,
         teamTotalRate,
@@ -732,6 +745,9 @@
     }
 
     function buildReport(data) {
+      if (!data.hasGross) {
+        return "";
+      }
       const teamLines = data.teams
         .map(row => `${row.name}：${formatAmount(data.gross)} × ${formatRate(row.rate)} = ${formatAmount(row.amount)}`)
         .join("\n");
@@ -757,24 +773,38 @@ ${shareholderLines}`;
       const data = compute();
       const monthText = formatMonthCN(data.month);
       const dateText = formatDateCN(data.date);
+      const periodParts = [];
 
-      els.period.textContent = `${monthText}结算 · 结算时间 ${dateText}`;
+      if (monthText) {
+        periodParts.push(`${monthText}结算`);
+      }
+
+      if (dateText) {
+        periodParts.push(`结算时间 ${dateText}`);
+      }
+
+      els.period.textContent = periodParts.join(" · ");
       els.month.textContent = monthText;
-      els.expense.textContent = `${formatAmount(data.totalExpense)} ${CONFIG.unit}`;
-      els.net.textContent = `${formatAmount(data.net)} ${CONFIG.unit}`;
+      els.expense.textContent = data.hasGross ? `${formatAmount(data.totalExpense)} ${CONFIG.unit}` : "";
+      els.net.textContent = data.hasGross ? `${formatAmount(data.net)} ${CONFIG.unit}` : "";
       els.expenseRate.textContent = formatRate(data.teamTotalRate);
 
-      renderRows(els.teamRows, data.teams, {
-        label: "合计支出",
-        rate: formatRate(data.teamTotalRate),
-        amount: data.totalExpense
-      });
+      if (data.hasGross) {
+        renderRows(els.teamRows, data.teams, {
+          label: "合计支出",
+          rate: formatRate(data.teamTotalRate),
+          amount: data.totalExpense
+        });
 
-      renderRows(els.shareRows, data.shareholders, {
-        label: "已分配合计",
-        rate: "",
-        amount: data.shareholders.reduce((sum, item) => sum + item.amount, 0)
-      });
+        renderRows(els.shareRows, data.shareholders, {
+          label: "已分配合计",
+          rate: "",
+          amount: data.shareholders.reduce((sum, item) => sum + item.amount, 0)
+        });
+      } else {
+        els.teamRows.innerHTML = "";
+        els.shareRows.innerHTML = "";
+      }
 
       els.report.value = buildReport(data);
       els.copyState.textContent = "";
@@ -787,6 +817,9 @@ ${shareholderLines}`;
 
     function downloadCsv() {
       const data = compute();
+      if (!data.hasGross) {
+        return;
+      }
       const rows = [
         ["类型", "名称", "基数", "比例", "金额"],
         ["结算", formatMonthCN(data.month), data.gross, "", data.gross],
@@ -831,9 +864,9 @@ ${shareholderLines}`;
     els.download.addEventListener("click", downloadCsv);
     els.print.addEventListener("click", () => window.print());
     els.sample.addEventListener("click", () => {
-      els.settlementMonth.value = "2026-05";
-      els.date.value = "2026-06-04";
-      els.gross.value = "1,678,298";
+      els.settlementMonth.value = "";
+      els.date.value = "";
+      els.gross.value = "";
       render();
     });
 
