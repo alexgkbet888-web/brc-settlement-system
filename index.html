@@ -809,7 +809,7 @@
       shareholders: [
         { name: "KK", rate: 0.25 },
         { name: "K", rate: 0.07 },
-        { name: "T/A", rate: 0.34 }
+        { name: "T/A", rate: 0.34, count: 2 }
       ],
       rounding: Math.floor
     };
@@ -926,7 +926,13 @@
       }));
       const shareholders = CONFIG.shareholders.map(item => ({
         ...item,
-        amount: CONFIG.rounding(net * item.rate)
+        count: item.count || 1,
+        singleAmount: CONFIG.rounding(net * item.rate)
+      })).map(item => ({
+        ...item,
+        displayName: item.count > 1 ? `${item.name}（${item.count}人）` : item.name,
+        rateText: item.count > 1 ? `${formatRate(item.rate)} × ${item.count}` : formatRate(item.rate),
+        amount: item.singleAmount * item.count
       }));
 
       return {
@@ -945,8 +951,8 @@
     function renderRows(target, rows, finalRow) {
       const body = rows.map(row => `
         <tr>
-          <td>${row.name}</td>
-          <td>${formatRate(row.rate)}</td>
+          <td>${row.displayName || row.name}</td>
+          <td>${row.rateText || formatRate(row.rate)}</td>
           <td>${formatAmount(row.amount)}</td>
         </tr>
       `).join("");
@@ -969,7 +975,13 @@
         .join("\n");
       const teamFormula = `${formatAmount(data.gross)} × ${formatRate(data.teamTotalRate)} = ${formatAmount(data.totalExpense)}`;
       const shareholderLines = data.shareholders
-        .map(row => `${row.name}：${formatAmount(data.net)} × ${formatRate(row.rate)} = ${formatAmount(row.amount)}`)
+        .map(row => {
+          if (row.count > 1) {
+            return `${row.displayName}：${formatAmount(data.net)} × ${formatRate(row.rate)} × ${row.count} = ${formatAmount(row.amount)}（每人 ${formatAmount(row.singleAmount)}）`;
+          }
+
+          return `${row.name}：${formatAmount(data.net)} × ${formatRate(row.rate)} = ${formatAmount(row.amount)}`;
+        })
         .join("\n\n");
 
       return `${formatMonthCN(data.month)}结算总额：${formatAmount(data.gross)}（单位：${CONFIG.unit}）
@@ -1042,7 +1054,7 @@ ${shareholderLines}`;
         ...data.teams.map(row => ["团队支出", row.name, data.gross, formatRate(row.rate), row.amount]),
         ["团队支出", "合计支出", data.gross, formatRate(data.teamTotalRate), data.totalExpense],
         ["净额", "净额", data.gross, "", data.net],
-        ...data.shareholders.map(row => ["股东分配", row.name, data.net, formatRate(row.rate), row.amount])
+        ...data.shareholders.map(row => ["股东分配", row.displayName || row.name, data.net, row.rateText || formatRate(row.rate), row.amount])
       ];
 
       const csv = `\ufeff${rows.map(row => row.map(csvEscape).join(",")).join("\n")}`;
